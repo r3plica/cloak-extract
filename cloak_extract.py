@@ -439,7 +439,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--print-urls", action="store_true",
                     help="Also print URLs to stdout while downloading (off by default when downloading)")
     ap.add_argument("--out-dir",
-                    help="In single-URL mode: download folder. In --site mode: parent folder for per-page subfolders.")
+                    help="Override the default ./downloads/<host>/ root. "
+                         "In single-URL mode: files go to <out-dir>/<slug>/. "
+                         "In --site mode: per-page subfolders go under <out-dir>/.")
     ap.add_argument("--workers", type=int, default=8,
                     help="Parallel image-download workers per page (default: 8)")
     ap.add_argument("--overwrite", action="store_true",
@@ -519,11 +521,12 @@ def run_single(args, info) -> int:
         if not urls:
             info("[!] Nothing to download (no images matched filters).")
         else:
+            slug = slug_from_url(target)
             if args.out_dir:
-                dest = args.out_dir
+                dest = os.path.join(args.out_dir, slug)
             else:
                 netloc = urlparse(target).netloc.replace(":", "_") or "site"
-                dest = os.path.join(DEFAULT_DOWNLOAD_ROOT, netloc, slug_from_url(target))
+                dest = os.path.join(DEFAULT_DOWNLOAD_ROOT, netloc, slug)
             if (not args.overwrite and os.path.isdir(dest)
                     and any(os.scandir(dest))):
                 existing = sum(1 for e in os.scandir(dest) if e.is_file())

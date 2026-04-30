@@ -52,6 +52,9 @@ cloak-extract https://example.com/some-post/ --csv out.csv
 
 # Custom output folder + parallel workers
 cloak-extract https://example.com/some-post/ --out-dir ./evidence --workers 12
+
+# Or relocate the downloads root (keeps the <host>/<slug>/ layout)
+cloak-extract https://example.com/some-post/ --downloads-dir D:\archive
 ```
 
 ### Whole site (sitemap walk)
