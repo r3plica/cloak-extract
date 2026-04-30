@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# cloak-extract launcher (Linux/macOS): ensures deps, then runs the tool.
+set -e
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STAMP="$DIR/.deps_installed"
+PY="${PYTHON:-python3}"
+
+if [ ! -f "$STAMP" ]; then
+    echo "[cloak-extract] First run: installing Python dependencies..."
+    "$PY" -m pip install --quiet --disable-pip-version-check -r "$DIR/requirements.txt"
+    touch "$STAMP"
+fi
+
+exec "$PY" "$DIR/cloak_extract.py" "$@"

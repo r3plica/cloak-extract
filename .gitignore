@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Tool state
+.deps_installed
+
+# Output / scratch
+*.log
+test*.csv
+out.csv
+out.txt
+urls.txt
+evidence/
+
+# Downloaded images (default download root + per-host folders)
+downloads/
+*.part
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
