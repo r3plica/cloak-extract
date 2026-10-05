@@ -76,6 +76,9 @@ cloak-extract https://example.com --site --filter "whitman|carter"
 
 # Custom parent folder
 cloak-extract https://example.com --site --out-dir ./evidence
+
+# Download every sitemap page from thesuntrapp.com into Glimr's galleries folder
+cloak-extract https://thesuntrapp.com --site --all-pages --out-dir "E:\GitHub\glimr\public\galleries"
 ```
 
 By default `--site` only processes pages whose slug starts with what looks
