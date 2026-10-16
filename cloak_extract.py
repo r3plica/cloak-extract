@@ -400,55 +400,116 @@ def download_all(urls: list[str], dest_dir: str, workers: int = 8,
     return stats
 
 
-def main(argv: list[str] | None = None) -> int:
+def load_config(path, options, parser, *, optional=False):
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            config = json.load(f)
+    except FileNotFoundError as e:
+        if optional:
+            return None
+        parser.error(f"Cannot read config {path}: {e}")
+    except (OSError, UnicodeError, json.JSONDecodeError) as e:
+        parser.error(f"Cannot read config {path}: {e}")
+    if not isinstance(config, dict):
+        parser.error(f"Config {path} must contain a JSON object")
+    defaults = {}
+    for key, value in config.items():
+        if key not in options:
+            parser.error(f"Unknown config option {key!r} in {path}")
+        dest, expected = options[key]
+        if type(value) is not expected or (
+                expected is list and any(not isinstance(item, str) for item in value)):
+            name = "array of strings" if expected is list else expected.__name__
+            parser.error(f"Config option {key!r} in {path} must be {name}")
+        defaults[dest] = value
+    return defaults
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(
         prog="cloak-extract",
         description="Extract / download images from cloaked Facebook-ad landing pages.",
     )
+    defaults = {}
+    options = {}
+
+    def add_option(*flags, **kwargs):
+        action_kind = kwargs.get("action")
+        expected = (bool if action_kind in (argparse.BooleanOptionalAction, "store_true")
+                    else list if action_kind == "append" else kwargs.get("type", str))
+        default = kwargs.pop("default", False if expected is bool else None)
+        action = ap.add_argument(*flags, default=argparse.SUPPRESS, **kwargs)
+        defaults[action.dest] = default
+        options[flags[0][2:]] = (action.dest, expected)
+
     ap.add_argument("url", help="Page URL, or site root if --site is used")
-    ap.add_argument("--site", action="store_true",
+    config_group = ap.add_mutually_exclusive_group()
+    config_group.add_argument("--config", metavar="FILE",
+                              help="Read defaults from this JSON file instead of automatic discovery.")
+    config_group.add_argument("--no-config", action="store_true",
+                              help="Ignore config files.")
+    ap.epilog = ("Defaults are read from cloak-extract.json in the current folder, "
+                 "then beside the script (first file wins). CLI options override config.")
+    add_option("--site", action=argparse.BooleanOptionalAction,
                     help="Treat URL as a site root: discover sitemap, process every page.")
-    ap.add_argument("--limit", type=int, default=0,
+    add_option("--limit", type=int, default=0,
                     help="With --site: only process the first N pages (0 = all).")
-    ap.add_argument("--filter", dest="url_filter",
+    add_option("--filter", dest="url_filter",
                     help="With --site: only include URLs matching this regex.")
-    ap.add_argument("--list-urls", action="store_true",
+    add_option("--list-urls", action=argparse.BooleanOptionalAction,
                     help="With --site: just print discovered page URLs and exit.")
-    ap.add_argument("--all-pages", action="store_true",
+    add_option("--all-pages", action=argparse.BooleanOptionalAction,
                     help="With --site: process every sitemap URL (default skips pages "
                          "whose slug doesn't look like a person's name, since cloaked "
                          "posts always have name-style slugs like 'clara-whitman-...').")
-    ap.add_argument("--host", action="append", default=[],
+    add_option("--host", action="append", default=[],
                     help="Only show images from this host (substring match). Repeatable. "
                          "Default behaviour filters to blogger.googleusercontent.com.")
-    ap.add_argument("--all-hosts", action="store_true",
+    add_option("--all-hosts", action=argparse.BooleanOptionalAction,
                     help="Don't filter to Blogger - include every image host found.")
-    ap.add_argument("--exclude-host", action="append", default=[],
+    add_option("--exclude-host", action="append", default=[],
                     help="Exclude images from this host (substring match). Repeatable.")
-    ap.add_argument("-o", "--out", help="Write unique image URLs to a text file (single-URL mode)")
-    ap.add_argument("--csv", help="Write detailed CSV (url, host, guid, size, filename)")
-    ap.add_argument("--json", action="store_true",
+    add_option("--out", "-o", help="Write unique image URLs to a text file (single-URL mode)")
+    add_option("--csv", help="Write detailed CSV (url, host, guid, size, filename)")
+    add_option("--json", action=argparse.BooleanOptionalAction,
                     help="Output JSON to stdout instead of plain URLs")
-    ap.add_argument("--no-auto-params", action="store_true",
+    add_option("--no-auto-params", action="store_true",
                     help="Don't auto-add cloaking params (cs=vg04, fbclid=...)")
-    ap.add_argument("--quiet", "-q", action="store_true", help="Suppress info on stderr")
-    ap.add_argument("--summary", action="store_true",
+    ap.add_argument("--auto-params", dest="no_auto_params", action="store_false",
+                    default=argparse.SUPPRESS, help="Enable automatic cloaking params.")
+    add_option("--quiet", "-q", action=argparse.BooleanOptionalAction, help="Suppress info on stderr")
+    add_option("--summary", action=argparse.BooleanOptionalAction,
                     help="Print only per-host counts, not URLs")
-    ap.add_argument("--skip-download", action="store_true",
+    add_option("--skip-download", action=argparse.BooleanOptionalAction,
                     help="Don't download images, just list them")
-    ap.add_argument("--print-urls", action="store_true",
+    add_option("--print-urls", action=argparse.BooleanOptionalAction,
                     help="Also print URLs to stdout while downloading (off by default when downloading)")
-    ap.add_argument("--out-dir",
+    add_option("--out-dir",
                     help="Override the default ./downloads/<host>/ root. "
                          "In single-URL mode: files go to <out-dir>/<slug>/. "
                          "In --site mode: per-page subfolders go under <out-dir>/.")
-    ap.add_argument("--workers", type=int, default=8,
+    add_option("--workers", type=int, default=8,
                     help="Parallel image-download workers per page (default: 8)")
-    ap.add_argument("--overwrite", action="store_true",
+    add_option("--overwrite", action=argparse.BooleanOptionalAction,
                     help="Re-download even if the page's output folder already exists "
                          "with files (default: skip already-processed pages).")
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     args = ap.parse_args(argv)
+    if not args.no_config:
+        paths = ([args.config] if args.config is not None else
+                 [os.path.join(os.getcwd(), "cloak-extract.json"),
+                  os.path.join(os.path.dirname(os.path.abspath(__file__)), "cloak-extract.json")])
+        for path in dict.fromkeys(paths):
+            config = load_config(path, options, ap, optional=args.config is None)
+            if config is not None:
+                defaults.update(config)
+                break
+    defaults.update(vars(args))
+    return argparse.Namespace(**defaults)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
 
     def info(msg: str) -> None:
         if not args.quiet:

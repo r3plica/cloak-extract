@@ -109,6 +109,56 @@ cloak-extract https://example.com/post/ --no-auto-params
 cloak-extract https://example.com/post/ -q
 ```
 
+### Config file defaults
+
+Save a `cloak-extract.json` file in your current working folder, or beside
+`cloak_extract.py` to share defaults when invoking the launcher from anywhere:
+
+```json
+{
+  "site": true,
+  "all-pages": true,
+  "out-dir": "E:\\images",
+  "workers": 12
+}
+```
+
+Then you only need the URL:
+
+```sh
+cloak-extract https://example.com
+```
+
+The current folder is checked first, followed by the script folder. Only the
+first file found is used; files are not merged. If neither exists, the normal
+CLI defaults apply. Relative paths (including `out-dir`) remain relative to
+the current working folder, just as on the command line.
+
+Keys use the long option names without `--`, including hyphens. All existing
+extraction/download options are supported: use JSON booleans for flags,
+integers for `limit` and `workers`, strings for other values, and arrays of
+strings for `host` and `exclude-host`. The URL must still be supplied on the
+command line; `url`, `config`, `no-config`, `help` and `version` are not config
+keys. Unknown keys, incorrect types, unreadable files and invalid JSON cause
+an error rather than silently using different defaults.
+
+Explicit command-line values override config values. Repeated `--host` or
+`--exclude-host` options replace the configured list. Boolean flags can be
+turned off with their `--no-` counterpart (for example `--no-site`,
+`--no-all-pages`, or `--no-skip-download`). Use `--auto-params` to override
+`"no-auto-params": true`.
+
+```sh
+# Override selected defaults
+cloak-extract https://example.com --out-dir ./other --workers 4
+
+# Use a specific config instead (error if missing)
+cloak-extract https://example.com --config my-defaults.json
+
+# Ignore config entirely
+cloak-extract https://example.com/post/ --no-config
+```
+
 > **Windows tip:** always wrap URLs in double quotes — `&` in cmd.exe is a
 > command separator and will break unquoted URLs.
 
@@ -143,7 +193,7 @@ cloak-extract URL | grep blogger
 
 - `0` — success
 - `1` — HTTP request failed
-- `2` — missing dependency
+- `2` — invalid arguments/config, or missing dependency
 
 ## License
 
